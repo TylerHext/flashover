@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Flashover - Strava Heatmap</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <h1>Flashover</h1>
+        <button class="collapse-btn" id="collapseBtn" aria-label="Toggle sidebar">◀</button>
+      </div>
+
+      <div class="sidebar-content">
+        <!-- Auth Status -->
+        <section class="auth-section">
+          <h2>Connection</h2>
+          <div id="authStatus">
+            <button id="loginBtn" class="btn btn-primary">Connect to Strava</button>
+          </div>
+          <button id="syncBtn" class="btn btn-secondary" style="display: none; margin-top: 10px;">
+            Sync Activities
+          </button>
+          <div id="syncStatus" style="margin-top: 10px;"></div>
+        </section>
+
+        <!-- Filters -->
+        <section class="filters-section">
+          <h2>Filters</h2>
+
+          <div class="filter-group">
+            <label for="activityType">Activity Type</label>
+            <select id="activityType" class="filter-input">
+              <option value="all">All Activities</option>
+              <option value="Run">Run</option>
+              <option value="Ride">Ride</option>
+              <option value="Walk">Walk</option>
+              <option value="Hike">Hike</option>
+            </select>
+          </div>
+
+          <div class="filter-group">
+            <label for="startDate">Start Date</label>
+            <input type="date" id="startDate" class="filter-input">
+          </div>
+
+          <div class="filter-group">
+            <label for="endDate">End Date</label>
+            <input type="date" id="endDate" class="filter-input">
+          </div>
+
+          <button id="applyFilters" class="btn btn-secondary">Apply Filters</button>
+        </section>
+
+        <!-- Stats -->
+        <section class="stats-section">
+          <h2>Statistics</h2>
+          <div id="stats" class="stats-content">
+            <p>Connect to Strava to see your stats</p>
+          </div>
+        </section>
+      </div>
+    </aside>
+
+    <!-- Map Container -->
+    <main class="map-container">
+      <div id="map"></div>
+    </main>
+  </div>
+
+  <script type="module" src="/main.ts"></script>
+</body>
+</html>
