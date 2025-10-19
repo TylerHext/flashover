@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import User, Activity
+from app.models import User, Activity, SyncLog
 from app.services.activity import ActivityService
 
 router = APIRouter(prefix="/api/activities", tags=["activities"])
@@ -14,6 +14,7 @@ router = APIRouter(prefix="/api/activities", tags=["activities"])
 @router.post("/sync")
 async def sync_activities(
     pages: int = Query(1, ge=1, le=50, description="Number of pages to fetch (1-50)"),
+    backfill: bool = Query(False, description="Backfill mode: fetch historical activities (ignore sync timestamp)"),
     db: Session = Depends(get_db)
 ):
     """
@@ -21,6 +22,7 @@ async def sync_activities(
 
     Default: Fetches 1 page (200 activities) for quick sync.
     Use pages parameter to fetch more: pages=5 fetches 1000 activities.
+    Use backfill=true to fetch historical activities (ignores last sync timestamp).
 
     For POC: Uses the first (and only) user in the database.
     In production, this would use session/cookie to identify the user.
@@ -35,7 +37,9 @@ async def sync_activities(
         )
 
     try:
-        result = await ActivityService.sync_user_activities(user, db, max_pages=pages)
+        result = await ActivityService.sync_user_activities(
+            user, db, max_pages=pages, backfill_mode=backfill
+        )
 
         message = f"Synced {result['new']} new activities"
         if result['has_more']:
@@ -118,6 +122,42 @@ async def get_activities(
     return {
         "count": len(activities_data),
         "activities": activities_data,
+    }
+
+
+@router.post("/sync/reset")
+async def reset_sync(db: Session = Depends(get_db)):
+    """
+    Reset sync state and clear all activities (DEVELOPMENT ONLY).
+
+    This allows testing the full backfill flow by clearing the sync log
+    and all activities, forcing a fresh sync from Strava.
+    """
+    # Get authenticated user (POC: first user)
+    user = db.query(User).first()
+
+    if not user:
+        raise HTTPException(
+            status_code=401,
+            detail="No authenticated user found. Please login first."
+        )
+
+    # Delete all activities for this user
+    activities_deleted = db.query(Activity).filter(Activity.user_id == user.id).delete()
+
+    # Delete sync log
+    sync_log = db.query(SyncLog).filter(SyncLog.user_id == user.id).first()
+    if sync_log:
+        db.delete(sync_log)
+
+    db.commit()
+
+    print(f"✓ Reset sync state: deleted {activities_deleted} activities and sync log")
+
+    return {
+        "success": True,
+        "message": f"Deleted {activities_deleted} activities and reset sync log",
+        "activities_deleted": activities_deleted,
     }
 
 

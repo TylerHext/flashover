@@ -52,35 +52,38 @@ body {
 }
 
 .sidebar-header {
-  padding: 20px;
+  padding: 15px;
   border-bottom: 1px solid var(--border-color);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.sidebar-header h1 {
-  font-size: 18px;
-  font-weight: 600;
-  letter-spacing: 1px;
-}
-
-.collapse-btn {
-  background: none;
-  border: none;
-  color: var(--text-secondary);
   cursor: pointer;
-  font-size: 14px;
-  padding: 5px;
-  transition: color 0.2s;
+  transition: background-color 0.2s;
 }
 
-.collapse-btn:hover {
+.sidebar-header:hover {
+  background-color: var(--bg-tertiary);
+}
+
+.sidebar-header pre {
+  margin: 0;
+  font-size: 8px;
+  line-height: 1.2;
   color: var(--text-primary);
+  font-family: monospace;
 }
 
-.sidebar.collapsed .collapse-btn {
-  transform: rotate(180deg);
+.logo-expanded {
+  display: block;
+}
+
+.logo-collapsed {
+  display: none;
+}
+
+.sidebar.collapsed .logo-expanded {
+  display: none;
+}
+
+.sidebar.collapsed .logo-collapsed {
+  display: block;
 }
 
 .sidebar-content {
@@ -354,6 +357,16 @@ section h2 {
 
 .btn-secondary:hover {
   background-color: var(--bg-primary);
+}
+
+.btn-warning {
+  background-color: rgba(255, 167, 38, 0.2);
+  color: #ffa726;
+  border: 1px solid rgba(255, 167, 38, 0.4);
+}
+
+.btn-warning:hover {
+  background-color: rgba(255, 167, 38, 0.3);
 }
 
 /* Stats Section */

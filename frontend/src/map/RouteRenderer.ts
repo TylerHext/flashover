@@ -60,6 +60,9 @@ export class RouteRenderer {
       params.set('end_date', options.endDate);
     }
 
+    // Add cache-busting parameter to force browser to fetch new tiles
+    params.set('_t', Date.now().toString());
+
     // Create tile layer URL
     const tileUrl = `/tiles/{z}/{x}/{y}.png${params.toString() ? '?' + params.toString() : ''}`;
 

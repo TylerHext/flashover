@@ -11,9 +11,20 @@
   <div class="app-container">
     <!-- Sidebar -->
     <aside class="sidebar" id="sidebar">
-      <div class="sidebar-header">
-        <h1>Flashover</h1>
-        <button class="collapse-btn" id="collapseBtn" aria-label="Toggle sidebar">◀</button>
+      <div class="sidebar-header" id="sidebarHeader">
+        <pre class="logo-expanded" id="logoExpanded">
+ _____ _           _
+|  ___| | __ _ ___| |__   _____   _____ _ __
+| |_  | |/ _` / __| '_ \ / _ \ \ / / _ \ '__|
+|  _| | | (_| \__ \ | | | (_) \ V /  __/ |
+|_|   |_|\__,_|___/_| |_|\___/ \_/ \___|_|
+        </pre>
+        <pre class="logo-collapsed" id="logoCollapsed">
+ ___
+|  _|
+| |
+|_|
+        </pre>
       </div>
 
       <div class="sidebar-content">
@@ -28,6 +39,9 @@
           </button>
           <button id="loadMoreBtn" class="btn btn-secondary" style="display: none; margin-top: 10px;">
             Load More Activities
+          </button>
+          <button id="resetBtn" class="btn btn-warning" style="display: none; margin-top: 10px;">
+            Reset Sync (Dev)
           </button>
           <div id="syncStatus" style="margin-top: 10px;"></div>
           <div id="syncProgress" class="sync-progress-bar" style="display: none; margin-top: 10px;">

@@ -15,7 +15,8 @@ class ActivityService:
         user: User,
         db: Session,
         max_pages: int = 1,
-        per_page: int = 200
+        per_page: int = 200,
+        backfill_mode: bool = False
     ) -> Dict:
         """
         Sync activities for a user from Strava API with pagination support.
@@ -25,6 +26,7 @@ class ActivityService:
             db: Database session
             max_pages: Maximum number of pages to fetch (default: 1 for quick sync)
             per_page: Activities per page (default: 200, max allowed by Strava)
+            backfill_mode: If True, fetch all historical activities (ignore sync log timestamp)
 
         Returns:
             Dictionary with sync results (new, updated, total counts, has_more, rate_limit)
@@ -33,11 +35,12 @@ class ActivityService:
         if user.is_token_expired:
             await ActivityService._refresh_user_token(user, db)
 
-        # Get last sync time to fetch only new activities
+        # Get last sync time to fetch only new activities (unless in backfill mode)
         sync_log = db.query(SyncLog).filter(SyncLog.user_id == user.id).first()
         after_timestamp = None
 
-        if sync_log:
+        # Only use 'after' timestamp if NOT in backfill mode
+        if sync_log and not backfill_mode:
             # Convert last_sync to unix timestamp
             after_timestamp = int(sync_log.last_sync.timestamp())
 
@@ -96,12 +99,14 @@ class ActivityService:
                 print(f"Received {len(activities_data)} activities (less than per_page={per_page}), no more pages")
                 break
 
-        # Update sync log
-        if sync_log:
-            sync_log.last_sync = datetime.utcnow()
-        else:
-            sync_log = SyncLog(user_id=user.id, last_sync=datetime.utcnow())
-            db.add(sync_log)
+        # Update sync log timestamp only if NOT in backfill mode
+        # In backfill mode, we don't update the timestamp so subsequent syncs can continue fetching historical data
+        if not backfill_mode:
+            if sync_log:
+                sync_log.last_sync = datetime.utcnow()
+            else:
+                sync_log = SyncLog(user_id=user.id, last_sync=datetime.utcnow())
+                db.add(sync_log)
 
         db.commit()
 
@@ -116,7 +121,7 @@ class ActivityService:
             "fetched": total_fetched,
             "has_more": has_more,
             "pages_fetched": page,
-            "last_sync": sync_log.last_sync.isoformat(),
+            "last_sync": sync_log.last_sync.isoformat() if sync_log else None,
         }
 
     @staticmethod

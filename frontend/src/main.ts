@@ -17,9 +17,9 @@ L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
 
 // Sidebar collapse functionality
 const sidebar = document.getElementById('sidebar');
-const collapseBtn = document.getElementById('collapseBtn');
+const sidebarHeader = document.getElementById('sidebarHeader');
 
-collapseBtn?.addEventListener('click', () => {
+sidebarHeader?.addEventListener('click', () => {
   sidebar?.classList.toggle('collapsed');
   // Trigger map resize after animation
   setTimeout(() => {
@@ -32,6 +32,7 @@ const loginBtn = document.getElementById('loginBtn');
 const authStatus = document.getElementById('authStatus');
 const syncBtn = document.getElementById('syncBtn');
 const loadMoreBtn = document.getElementById('loadMoreBtn');
+const resetBtn = document.getElementById('resetBtn');
 const syncStatus = document.getElementById('syncStatus');
 const syncProgress = document.getElementById('syncProgress');
 const progressFill = document.getElementById('progressFill');
@@ -64,9 +65,12 @@ async function checkAuthStatus() {
         `;
       }
 
-      // Show sync button
+      // Show sync and reset buttons
       if (syncBtn) {
         syncBtn.style.display = 'block';
+      }
+      if (resetBtn) {
+        resetBtn.style.display = 'block';
       }
 
       console.log('✓ User authenticated:', data.strava_id);
@@ -95,7 +99,7 @@ syncBtn?.addEventListener('click', async () => {
   if (syncProgress) syncProgress.style.display = 'block';
 
   try {
-    const response = await fetch('/api/activities/sync?pages=1', {
+    const response = await fetch('/api/activities/sync?pages=1&backfill=true', {
       method: 'POST',
     });
 
@@ -127,9 +131,8 @@ syncBtn?.addEventListener('click', async () => {
       loadMoreBtn.style.display = data.has_more ? 'block' : 'none';
     }
 
-    // Reload stats and render routes
-    loadActivityStats();
-    renderRoutes();
+    // Clear tile cache and reload
+    await clearTileCacheAndRender();
 
   } catch (error) {
     syncStatus.innerHTML = `
@@ -155,8 +158,8 @@ loadMoreBtn?.addEventListener('click', async () => {
   syncStatus.innerHTML = '<p class="sync-progress">Fetching more activities from Strava...</p>';
 
   try {
-    // Fetch 5 pages (1000 activities)
-    const response = await fetch('/api/activities/sync?pages=5', {
+    // Fetch 5 pages (1000 activities) in backfill mode
+    const response = await fetch('/api/activities/sync?pages=5&backfill=true', {
       method: 'POST',
     });
 
@@ -189,9 +192,8 @@ loadMoreBtn?.addEventListener('click', async () => {
       syncStatus.innerHTML += '<p class="sync-detail" style="margin-top: 10px;">All historical activities have been loaded.</p>';
     }
 
-    // Reload stats and render routes
-    loadActivityStats();
-    renderRoutes();
+    // Clear tile cache and reload
+    await clearTileCacheAndRender();
 
   } catch (error) {
     syncStatus.innerHTML = `
@@ -204,6 +206,68 @@ loadMoreBtn?.addEventListener('click', async () => {
   } finally {
     loadMoreBtn.disabled = false;
     loadMoreBtn.textContent = originalText || 'Load More Activities';
+  }
+});
+
+// Reset sync state (DEVELOPMENT ONLY)
+resetBtn?.addEventListener('click', async () => {
+  if (!resetBtn || !syncStatus) return;
+
+  const confirmed = confirm('⚠️ This will delete ALL activities and reset sync state. Are you sure? This is for testing only.');
+  if (!confirmed) return;
+
+  resetBtn.disabled = true;
+  resetBtn.textContent = 'Resetting...';
+
+  try {
+    const response = await fetch('/api/activities/sync/reset', {
+      method: 'POST',
+    });
+
+    if (!response.ok) {
+      throw new Error('Reset failed');
+    }
+
+    const data = await response.json();
+
+    syncStatus.innerHTML = `
+      <div class="sync-success">
+        <p>✓ Reset complete!</p>
+        <p class="sync-detail">${data.activities_deleted} activities deleted</p>
+        <p class="sync-detail">Sync log cleared - ready for fresh backfill</p>
+      </div>
+    `;
+
+    console.log('✓ Sync state reset:', data);
+
+    // Hide load more button
+    if (loadMoreBtn) {
+      loadMoreBtn.style.display = 'none';
+    }
+
+    // Reset progress bar
+    if (progressFill && progressText) {
+      progressFill.style.width = '0%';
+      progressText.textContent = '0 activities loaded';
+    }
+
+    // Clear routes from map
+    routeRenderer.clearRoutes();
+
+    // Reload stats
+    loadActivityStats();
+
+  } catch (error) {
+    syncStatus.innerHTML = `
+      <div class="sync-error">
+        <p>✗ Reset failed</p>
+        <p class="sync-detail">${error}</p>
+      </div>
+    `;
+    console.error('Reset error:', error);
+  } finally {
+    resetBtn.disabled = false;
+    resetBtn.textContent = 'Reset Sync (Dev)';
   }
 });
 
@@ -277,6 +341,28 @@ async function renderRoutes() {
 
   } catch (error) {
     console.error('Failed to render routes:', error);
+  }
+}
+
+// Helper function to clear tile cache and re-render
+async function clearTileCacheAndRender() {
+  try {
+    // Clear backend tile cache
+    console.log('Clearing tile cache...');
+    await fetch('/tiles/cache/clear', { method: 'POST' });
+
+    // Reload stats
+    loadActivityStats();
+
+    // Re-render routes (this will fetch fresh tiles)
+    renderRoutes();
+
+    console.log('✓ Tile cache cleared and routes re-rendered');
+  } catch (error) {
+    console.error('Failed to clear cache:', error);
+    // Still try to render even if cache clear fails
+    loadActivityStats();
+    renderRoutes();
   }
 }
 
