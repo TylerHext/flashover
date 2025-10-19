@@ -11,16 +11,23 @@ class ActivityService:
     """Service for managing activity data sync with Strava."""
 
     @staticmethod
-    async def sync_user_activities(user: User, db: Session) -> Dict:
+    async def sync_user_activities(
+        user: User,
+        db: Session,
+        max_pages: int = 1,
+        per_page: int = 200
+    ) -> Dict:
         """
-        Sync activities for a user from Strava API.
+        Sync activities for a user from Strava API with pagination support.
 
         Args:
             user: User object with valid tokens
             db: Database session
+            max_pages: Maximum number of pages to fetch (default: 1 for quick sync)
+            per_page: Activities per page (default: 200, max allowed by Strava)
 
         Returns:
-            Dictionary with sync results (new, updated, total counts)
+            Dictionary with sync results (new, updated, total counts, has_more, rate_limit)
         """
         # Check if token needs refresh
         if user.is_token_expired:
@@ -34,36 +41,60 @@ class ActivityService:
             # Convert last_sync to unix timestamp
             after_timestamp = int(sync_log.last_sync.timestamp())
 
-        # Fetch activities from Strava
-        activities_data = await StravaService.get_athlete_activities(
-            access_token=user.access_token,
-            per_page=100,  # Fetch 100 activities at a time
-            after=after_timestamp,
-        )
-
         new_count = 0
         updated_count = 0
+        total_fetched = 0
+        has_more = False
+        rate_limit_usage = None
+        rate_limit_limit = None
 
-        for activity_data in activities_data:
-            strava_id = activity_data["id"]
+        # Fetch activities from Strava with pagination
+        for page in range(1, max_pages + 1):
+            print(f"Fetching page {page} of activities (per_page={per_page})...")
 
-            # Check if activity already exists
-            existing = db.query(Activity).filter(
-                Activity.strava_activity_id == strava_id
-            ).first()
+            activities_data = await StravaService.get_athlete_activities(
+                access_token=user.access_token,
+                page=page,
+                per_page=per_page,
+                after=after_timestamp,
+            )
 
-            activity_obj = ActivityService._parse_activity_data(activity_data, user.id)
+            # If no activities returned, we've reached the end
+            if not activities_data:
+                print(f"No more activities on page {page}, stopping pagination")
+                has_more = False
+                break
 
-            if existing:
-                # Update existing activity
-                for key, value in activity_obj.items():
-                    setattr(existing, key, value)
-                updated_count += 1
+            total_fetched += len(activities_data)
+
+            for activity_data in activities_data:
+                strava_id = activity_data["id"]
+
+                # Check if activity already exists
+                existing = db.query(Activity).filter(
+                    Activity.strava_activity_id == strava_id
+                ).first()
+
+                activity_obj = ActivityService._parse_activity_data(activity_data, user.id)
+
+                if existing:
+                    # Update existing activity
+                    for key, value in activity_obj.items():
+                        setattr(existing, key, value)
+                    updated_count += 1
+                else:
+                    # Create new activity
+                    new_activity = Activity(**activity_obj)
+                    db.add(new_activity)
+                    new_count += 1
+
+            # If we got a full page, there might be more
+            if len(activities_data) == per_page:
+                has_more = True
             else:
-                # Create new activity
-                new_activity = Activity(**activity_obj)
-                db.add(new_activity)
-                new_count += 1
+                has_more = False
+                print(f"Received {len(activities_data)} activities (less than per_page={per_page}), no more pages")
+                break
 
         # Update sync log
         if sync_log:
@@ -76,12 +107,15 @@ class ActivityService:
 
         total_count = db.query(Activity).filter(Activity.user_id == user.id).count()
 
-        print(f"✓ Synced activities: {new_count} new, {updated_count} updated, {total_count} total")
+        print(f"✓ Synced activities: {new_count} new, {updated_count} updated, {total_count} total, {total_fetched} fetched this sync")
 
         return {
             "new": new_count,
             "updated": updated_count,
             "total": total_count,
+            "fetched": total_fetched,
+            "has_more": has_more,
+            "pages_fetched": page,
             "last_sync": sync_log.last_sync.isoformat(),
         }
 

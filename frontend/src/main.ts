@@ -1,12 +1,12 @@
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { HeatmapRenderer } from './map/heatmap';
+import { RouteRenderer } from './map/RouteRenderer';
 
 // Initialize the map
-const map = L.map('map').setView([37.7749, -122.4194], 12); // Default: San Francisco
+const map = L.map('map').setView([33.8761, -118.3965], 12); // Los Angeles area
 
-// Initialize heatmap renderer
-const heatmapRenderer = new HeatmapRenderer(map);
+// Initialize route renderer
+const routeRenderer = new RouteRenderer(map);
 
 // Add OpenStreetMap tile layer (dark theme)
 L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
@@ -31,8 +31,15 @@ collapseBtn?.addEventListener('click', () => {
 const loginBtn = document.getElementById('loginBtn');
 const authStatus = document.getElementById('authStatus');
 const syncBtn = document.getElementById('syncBtn');
+const loadMoreBtn = document.getElementById('loadMoreBtn');
 const syncStatus = document.getElementById('syncStatus');
+const syncProgress = document.getElementById('syncProgress');
+const progressFill = document.getElementById('progressFill');
+const progressText = document.getElementById('progressText');
 const statsDiv = document.getElementById('stats');
+
+// Track sync state
+let hasMoreActivities = false;
 
 loginBtn?.addEventListener('click', async () => {
   // Redirect to backend auth endpoint
@@ -64,9 +71,9 @@ async function checkAuthStatus() {
 
       console.log('✓ User authenticated:', data.strava_id);
 
-      // Load activity stats and heatmap
+      // Load activity stats and render routes
       loadActivityStats();
-      loadAndRenderHeatmap();
+      renderRoutes();
     } else {
       // User not authenticated
       console.log('User not authenticated');
@@ -76,16 +83,19 @@ async function checkAuthStatus() {
   }
 }
 
-// Sync activities from Strava
+// Sync activities from Strava (initial sync - 200 activities)
 syncBtn?.addEventListener('click', async () => {
   if (!syncBtn || !syncStatus) return;
 
   syncBtn.disabled = true;
   syncBtn.textContent = 'Syncing...';
-  syncStatus.innerHTML = '<p class="sync-progress">Fetching activities from Strava...</p>';
+  syncStatus.innerHTML = '<p class="sync-progress">Fetching recent activities from Strava...</p>';
+
+  // Show progress bar
+  if (syncProgress) syncProgress.style.display = 'block';
 
   try {
-    const response = await fetch('/api/activities/sync', {
+    const response = await fetch('/api/activities/sync?pages=1', {
       method: 'POST',
     });
 
@@ -95,19 +105,31 @@ syncBtn?.addEventListener('click', async () => {
 
     const data = await response.json();
 
+    // Update progress
+    updateSyncProgress(data.total);
+
     syncStatus.innerHTML = `
       <div class="sync-success">
-        <p>✓ Sync complete!</p>
+        <p>✓ Initial sync complete!</p>
         <p class="sync-detail">${data.new} new, ${data.updated} updated</p>
         <p class="sync-detail">Total: ${data.total} activities</p>
+        ${data.has_more ? '<p class="sync-detail">More activities available - click "Load More"</p>' : ''}
       </div>
     `;
 
     console.log('✓ Activities synced:', data);
 
-    // Reload stats and render heatmap
+    // Track if there are more activities
+    hasMoreActivities = data.has_more;
+
+    // Show "Load More" button if there are more activities
+    if (loadMoreBtn) {
+      loadMoreBtn.style.display = data.has_more ? 'block' : 'none';
+    }
+
+    // Reload stats and render routes
     loadActivityStats();
-    loadAndRenderHeatmap();
+    renderRoutes();
 
   } catch (error) {
     syncStatus.innerHTML = `
@@ -122,6 +144,80 @@ syncBtn?.addEventListener('click', async () => {
     syncBtn.textContent = 'Sync Activities';
   }
 });
+
+// Load more activities (deep backfill - 1000 activities per click)
+loadMoreBtn?.addEventListener('click', async () => {
+  if (!loadMoreBtn || !syncStatus) return;
+
+  loadMoreBtn.disabled = true;
+  const originalText = loadMoreBtn.textContent;
+  loadMoreBtn.textContent = 'Loading...';
+  syncStatus.innerHTML = '<p class="sync-progress">Fetching more activities from Strava...</p>';
+
+  try {
+    // Fetch 5 pages (1000 activities)
+    const response = await fetch('/api/activities/sync?pages=5', {
+      method: 'POST',
+    });
+
+    if (!response.ok) {
+      throw new Error('Load more failed');
+    }
+
+    const data = await response.json();
+
+    // Update progress
+    updateSyncProgress(data.total);
+
+    syncStatus.innerHTML = `
+      <div class="sync-success">
+        <p>✓ Loaded more activities!</p>
+        <p class="sync-detail">${data.fetched} activities fetched</p>
+        <p class="sync-detail">Total: ${data.total} activities</p>
+        ${data.has_more ? '<p class="sync-detail">More available - click again to continue</p>' : '<p class="sync-detail">All activities loaded!</p>'}
+      </div>
+    `;
+
+    console.log('✓ More activities loaded:', data);
+
+    // Track if there are more activities
+    hasMoreActivities = data.has_more;
+
+    // Hide button if no more activities
+    if (!data.has_more) {
+      loadMoreBtn.style.display = 'none';
+      syncStatus.innerHTML += '<p class="sync-detail" style="margin-top: 10px;">All historical activities have been loaded.</p>';
+    }
+
+    // Reload stats and render routes
+    loadActivityStats();
+    renderRoutes();
+
+  } catch (error) {
+    syncStatus.innerHTML = `
+      <div class="sync-error">
+        <p>✗ Load more failed</p>
+        <p class="sync-detail">${error}</p>
+      </div>
+    `;
+    console.error('Load more error:', error);
+  } finally {
+    loadMoreBtn.disabled = false;
+    loadMoreBtn.textContent = originalText || 'Load More Activities';
+  }
+});
+
+// Update sync progress bar
+function updateSyncProgress(total: number) {
+  if (!progressText || !progressFill) return;
+
+  progressText.textContent = `${total} activities loaded`;
+
+  // Estimate progress (assume max 3000 activities as typical max)
+  const estimatedMax = 3000;
+  const percentage = Math.min((total / estimatedMax) * 100, 100);
+  progressFill.style.width = `${percentage}%`;
+}
 
 // Load activity statistics
 async function loadActivityStats() {
@@ -158,30 +254,29 @@ async function loadActivityStats() {
   }
 }
 
-// Load and render heatmap from activities
-async function loadAndRenderHeatmap() {
+// Render routes using tile-based visualization
+async function renderRoutes() {
   try {
-    console.log('Loading activities for heatmap...');
+    console.log('Rendering routes...');
 
-    const response = await fetch('/api/activities');
+    // Check if there are any activities first
+    const response = await fetch('/api/activities/stats');
     const data = await response.json();
 
-    if (data.count === 0) {
+    if (data.total === 0) {
       console.log('No activities to render');
       return;
     }
 
-    console.log(`Loaded ${data.count} activities`);
+    console.log(`Rendering routes for ${data.total} activities`);
 
-    // Render heatmap with activities
-    heatmapRenderer.renderHeatmap(data.activities, {
-      radius: 15,
-      blur: 20,
-      maxIntensity: 1.0,
+    // Render routes with default gradient (orange)
+    routeRenderer.renderRoutes({
+      gradient: 'orange',
     });
 
   } catch (error) {
-    console.error('Failed to load and render heatmap:', error);
+    console.error('Failed to render routes:', error);
   }
 }
 
@@ -195,15 +290,82 @@ if (urlParams.get('auth') === 'success') {
   checkAuthStatus();
 }
 
-// Filter functionality
-const applyFiltersBtn = document.getElementById('applyFilters');
-applyFiltersBtn?.addEventListener('click', () => {
+// Gradient tab switching
+const presetTab = document.getElementById('presetTab');
+const customTab = document.getElementById('customTab');
+const presetControls = document.getElementById('presetControls');
+const customControls = document.getElementById('customControls');
+
+presetTab?.addEventListener('click', () => {
+  presetTab.classList.add('active');
+  customTab?.classList.remove('active');
+  presetControls?.classList.add('active');
+  customControls?.classList.remove('active');
+});
+
+customTab?.addEventListener('click', () => {
+  customTab.classList.add('active');
+  presetTab?.classList.remove('active');
+  customControls?.classList.add('active');
+  presetControls?.classList.remove('active');
+});
+
+// Update midpoint value display
+const midpointSlider = document.getElementById('midpoint') as HTMLInputElement;
+const midpointValue = document.getElementById('midpointValue');
+
+midpointSlider?.addEventListener('input', () => {
+  if (midpointValue) {
+    midpointValue.textContent = midpointSlider.value;
+  }
+});
+
+// Apply gradient
+const applyGradientBtn = document.getElementById('applyGradient');
+applyGradientBtn?.addEventListener('click', () => {
   const activityType = (document.getElementById('activityType') as HTMLSelectElement)?.value;
   const startDate = (document.getElementById('startDate') as HTMLInputElement)?.value;
   const endDate = (document.getElementById('endDate') as HTMLInputElement)?.value;
 
-  console.log('Applying filters:', { activityType, startDate, endDate });
-  // TODO: Implement filter logic with backend API
+  // Check if using custom or preset gradient
+  const useCustom = customControls?.classList.contains('active');
+
+  if (useCustom) {
+    const minColor = (document.getElementById('minColor') as HTMLInputElement)?.value;
+    const midColor = (document.getElementById('midColor') as HTMLInputElement)?.value;
+    const maxColor = (document.getElementById('maxColor') as HTMLInputElement)?.value;
+    const midpoint = parseInt((document.getElementById('midpoint') as HTMLInputElement)?.value || '10');
+
+    console.log('Applying custom gradient:', { minColor, midColor, maxColor, midpoint });
+
+    routeRenderer.renderRoutes({
+      minColor,
+      midColor,
+      maxColor,
+      midpoint,
+      activityType: activityType !== 'all' ? activityType : undefined,
+      startDate: startDate || undefined,
+      endDate: endDate || undefined,
+    });
+  } else {
+    const gradientPreset = (document.getElementById('gradientPreset') as HTMLSelectElement)?.value;
+
+    console.log('Applying preset gradient:', gradientPreset);
+
+    routeRenderer.renderRoutes({
+      gradient: gradientPreset,
+      activityType: activityType !== 'all' ? activityType : undefined,
+      startDate: startDate || undefined,
+      endDate: endDate || undefined,
+    });
+  }
+});
+
+// Filter functionality
+const applyFiltersBtn = document.getElementById('applyFilters');
+applyFiltersBtn?.addEventListener('click', () => {
+  // Trigger gradient apply button (which applies both gradient and filters)
+  applyGradientBtn?.click();
 });
 
 // Health check on load

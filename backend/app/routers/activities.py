@@ -12,9 +12,15 @@ router = APIRouter(prefix="/api/activities", tags=["activities"])
 
 
 @router.post("/sync")
-async def sync_activities(db: Session = Depends(get_db)):
+async def sync_activities(
+    pages: int = Query(1, ge=1, le=50, description="Number of pages to fetch (1-50)"),
+    db: Session = Depends(get_db)
+):
     """
-    Sync activities from Strava for the authenticated user.
+    Sync activities from Strava for the authenticated user with pagination support.
+
+    Default: Fetches 1 page (200 activities) for quick sync.
+    Use pages parameter to fetch more: pages=5 fetches 1000 activities.
 
     For POC: Uses the first (and only) user in the database.
     In production, this would use session/cookie to identify the user.
@@ -29,10 +35,15 @@ async def sync_activities(db: Session = Depends(get_db)):
         )
 
     try:
-        result = await ActivityService.sync_user_activities(user, db)
+        result = await ActivityService.sync_user_activities(user, db, max_pages=pages)
+
+        message = f"Synced {result['new']} new activities"
+        if result['has_more']:
+            message += f" ({result['fetched']} fetched, more available)"
+
         return {
             "success": True,
-            "message": f"Synced {result['new']} new activities",
+            "message": message,
             **result,
         }
     except Exception as e:
@@ -107,6 +118,35 @@ async def get_activities(
     return {
         "count": len(activities_data),
         "activities": activities_data,
+    }
+
+
+@router.get("/sync/status")
+async def get_sync_status(db: Session = Depends(get_db)):
+    """
+    Get sync status for the authenticated user.
+
+    Returns information about last sync time and activity counts.
+    """
+    # Get authenticated user (POC: first user)
+    user = db.query(User).first()
+
+    if not user:
+        raise HTTPException(
+            status_code=401,
+            detail="No authenticated user found. Please login first."
+        )
+
+    # Get sync log
+    sync_log = db.query(SyncLog).filter(SyncLog.user_id == user.id).first()
+
+    # Get activity count
+    total_activities = db.query(Activity).filter(Activity.user_id == user.id).count()
+
+    return {
+        "total_activities": total_activities,
+        "last_sync": sync_log.last_sync.isoformat() if sync_log else None,
+        "has_synced": sync_log is not None,
     }
 
 

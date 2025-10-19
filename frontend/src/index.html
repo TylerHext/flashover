@@ -26,7 +26,63 @@
           <button id="syncBtn" class="btn btn-secondary" style="display: none; margin-top: 10px;">
             Sync Activities
           </button>
+          <button id="loadMoreBtn" class="btn btn-secondary" style="display: none; margin-top: 10px;">
+            Load More Activities
+          </button>
           <div id="syncStatus" style="margin-top: 10px;"></div>
+          <div id="syncProgress" class="sync-progress-bar" style="display: none; margin-top: 10px;">
+            <div class="progress-fill" id="progressFill"></div>
+            <div class="progress-text" id="progressText">0 activities loaded</div>
+          </div>
+        </section>
+
+        <!-- Gradient Controls -->
+        <section class="gradient-section">
+          <h2>Color Gradient</h2>
+
+          <div class="gradient-tabs">
+            <button id="presetTab" class="gradient-tab active">Presets</button>
+            <button id="customTab" class="gradient-tab">Custom</button>
+          </div>
+
+          <!-- Preset Gradients -->
+          <div id="presetControls" class="gradient-controls active">
+            <div class="filter-group">
+              <label for="gradientPreset">Preset Gradient</label>
+              <select id="gradientPreset" class="filter-input">
+                <option value="orange" selected>Orange</option>
+                <option value="pinkish">Pinkish</option>
+                <option value="blue_red">Blue → Red</option>
+                <option value="red">Red</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Custom Gradient -->
+          <div id="customControls" class="gradient-controls">
+            <div class="filter-group">
+              <label for="minColor">Min Color</label>
+              <input type="color" id="minColor" class="color-input" value="#fc4a1a">
+            </div>
+
+            <div class="filter-group">
+              <label for="midColor">Mid Color</label>
+              <input type="color" id="midColor" class="color-input" value="#f7b733">
+            </div>
+
+            <div class="filter-group">
+              <label for="maxColor">Max Color</label>
+              <input type="color" id="maxColor" class="color-input" value="#ffffff">
+            </div>
+
+            <div class="filter-group">
+              <label for="midpoint">Midpoint Intensity</label>
+              <input type="range" id="midpoint" class="slider-input" min="1" max="50" value="10">
+              <span id="midpointValue" class="slider-value">10</span>
+            </div>
+          </div>
+
+          <button id="applyGradient" class="btn btn-secondary">Apply Gradient</button>
         </section>
 
         <!-- Filters -->

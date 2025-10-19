@@ -4,13 +4,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Flashover is a web application that visualizes Strava activities as a personalized, dynamic heatmap. It's currently a single-user POC designed for local Docker deployment, but the architecture supports future expansion to multi-user SaaS.
+Flashover is a web application that visualizes Strava activities with **tile-based route rendering** and **overlap-based gradient coloring**. Routes appear as distinct lines that get brighter where they overlap, revealing your most-traveled paths. It's currently a single-user POC designed for local Docker deployment, but the architecture supports future expansion to multi-user SaaS.
 
 **Tech Stack:**
-- Backend: Python 3.11 + FastAPI + SQLAlchemy
+- Backend: Python 3.11 + FastAPI + SQLAlchemy + NumPy + Pillow
 - Frontend: TypeScript + Vite + Leaflet.js
 - Database: SQLite (easily swappable to Postgres)
+- Rendering: Custom tile rasterizer with Bresenham line drawing + Cohen-Sutherland clipping
 - Deployment: Multi-stage Docker build
+
+**Key Innovation:**
+- Tile-based rendering system inspired by Rust reference implementation (refs/src/)
+- Routes rendered as web map tiles with overlap-based gradient coloring
+- 100MB in-memory tile cache for instant pan/zoom
 
 ## Development Commands
 
@@ -104,6 +110,14 @@ No test suite is currently implemented. When adding tests, use pytest for backen
 - `ActivityService`: Activity sync and retrieval logic
   - `sync_user_activities()`: Syncs activities from Strava, handles token refresh, tracks new vs updated
   - `get_activities()`: Queries activities with filters (type, date range)
+- `tile_renderer.py`: Core tile rasterization engine
+  - `TileRasterizer`: Converts routes to pixel grids with overlap counting
+  - `LinearGradient`: Color palette system for overlap visualization
+  - `TileCoordinate`: Web Mercator projection utilities
+  - Cohen-Sutherland line clipping for seamless tile boundaries
+  - **CRITICAL**: Tracks original polyline indices to prevent spurious lines (see docs/TILE_SEAM_BUG_FIX.md)
+- `polyline.py`: Google Polyline encoder/decoder
+  - Returns coordinates in (lng, lat) order for tile renderer
 
 **API Endpoints:** `backend/app/routers/`
 - `/auth/strava`: Initiates OAuth flow (redirects to Strava)
@@ -112,6 +126,10 @@ No test suite is currently implemented. When adding tests, use pytest for backen
 - `/api/activities/sync` [POST]: Syncs activities from Strava
 - `/api/activities` [GET]: Retrieves activities with optional filters (activity_type, start_date, end_date)
 - `/api/activities/stats` [GET]: Returns activity counts by type and date range
+- `/tiles/{z}/{x}/{y}.png` [GET]: Renders route tiles with overlap-based coloring
+  - Supports query params: gradient, activity_type, start_date, end_date
+  - 100MB in-memory cache with HIT/MISS headers
+- `/tiles/cache/clear` [POST]: Clear tile cache (development only)
 - `/health`: Health check endpoint
 
 **POC Authentication Pattern:**
@@ -122,17 +140,22 @@ No test suite is currently implemented. When adding tests, use pytest for backen
 ### Frontend Architecture
 
 **Entry Point:** `frontend/src/main.ts`
-- Initializes Leaflet map with dark CARTO tiles
+- Initializes Leaflet map with dark CARTO tiles (centered on Los Angeles)
 - Handles authentication flow and status checks
-- Manages activity sync and heatmap rendering
+- Manages activity sync and route tile rendering
 - Sidebar collapse functionality
+- Filter controls for activity type and date range
 
 **Map Rendering:** `frontend/src/map/`
-- `HeatmapRenderer`: Manages heatmap layer creation using Leaflet.heat
-- `polyline.ts`: Decodes Strava's encoded polylines to lat/lng coordinates
+- `RouteRenderer.ts`: Leaflet TileLayer wrapper for custom tile endpoint
+  - Renders routes using `/tiles/{z}/{x}/{y}.png` endpoint
+  - Supports dynamic gradient and filter updates
+  - Replaces old leaflet.heat heatmap approach
+- `polyline.ts`: Utility functions for polyline operations
 
 **Build System:** Vite with TypeScript
-- Dev server runs on port 3000 with proxy to backend (:8080) for `/api` and `/auth` routes
+- Dev server runs on port 3000 with proxy to backend (:8080)
+- Proxies `/api`, `/auth`, `/tiles`, and `/health` routes to backend
 - Production build outputs to `frontend/dist` which backend serves as static files
 
 **OAuth Flow:**
@@ -168,11 +191,18 @@ No test suite is currently implemented. When adding tests, use pytest for backen
 6. Backend updates `SyncLog` with current timestamp
 7. Frontend reloads stats and re-renders heatmap
 
-**Heatmap Rendering:**
-1. Frontend fetches activities via `GET /api/activities` (with optional filters)
-2. Activities include encoded polylines from Strava
-3. `HeatmapRenderer.renderHeatmap()` decodes polylines to lat/lng points
-4. Leaflet.heat plugin renders heatmap layer on map
+**Route Tile Rendering:**
+1. Frontend creates Leaflet TileLayer pointing to `/tiles/{z}/{x}/{y}.png`
+2. For each visible tile, backend:
+   - Queries activities that intersect tile bounds (spatial filtering)
+   - Decodes polylines and converts to Web Mercator coordinates
+   - Rasterizes routes onto 512×512 pixel grid using Bresenham's algorithm
+   - Tracks original polyline indices to maintain topological integrity
+   - Counts overlaps per pixel (0-255)
+   - Applies gradient color palette based on overlap count
+   - Returns PNG tile (cached for subsequent requests)
+3. Leaflet displays tiles seamlessly across map
+4. Browser caches tiles via Cache-Control headers
 
 ## Key Implementation Patterns
 
@@ -192,12 +222,50 @@ No test suite is currently implemented. When adding tests, use pytest for backen
 
 **Filter Implementation:**
 - Activities are indexed by `type` and `start_date` for efficient filtering
-- Frontend filter UI exists but is not fully wired (TODO in codebase)
+- Frontend passes filters as query params to tile endpoint
+- Filters dynamically update tile URLs, triggering re-render
+
+**Tile Rendering Critical Patterns:**
+1. **Original Index Tracking** (MOST IMPORTANT - see docs/TILE_SEAM_BUG_FIX.md):
+   - Track original GPS point indices when converting to mercator
+   - Only draw lines between points that were consecutive in original polyline (idx1 - idx0 == 1)
+   - Prevents spurious lines connecting distant points that both happen to intersect tile
+
+2. **Cohen-Sutherland Line Clipping**:
+   - Clip line segments to exact tile boundaries
+   - Ensures adjacent tiles render consistently with no seams
+   - Snap boundary coordinates to exact values (eliminate float rounding errors)
+
+3. **Consistent Rounding**:
+   - Use `round()` not `int()` for pixel coordinate conversion
+   - Ensures same mercator coordinate maps to same pixel in adjacent tiles
+
+4. **Spatial Filtering**:
+   - Only process activities with at least one point near tile (expanded bounds)
+   - Skip segments where neither endpoint is near tile
+   - Dramatically reduces computation (5-15 activities per tile vs 100)
+
+5. **In-Memory Caching**:
+   - Cache tiles by (z, x, y, gradient, filters) key
+   - 100MB cache size limit with simple eviction
+   - Headers show X-Cache: HIT/MISS for debugging
+
+## Documentation
+
+Comprehensive technical documentation in `docs/`:
+- **TILE_SEAM_BUG_FIX.md**: Critical retrospective on spurious line bug and fix
+- **ROUTE_VISUALIZATION_UPGRADE.md**: Complete system overview and architecture
+- **PERFORMANCE_OPTIMIZATIONS.md**: Caching, spatial filtering, optimization strategies
+- **FIXED_POLYLINE_BUG.md**: Initial polyline decoder fixes
+- **README.md**: Documentation index and navigation
 
 ## Future Enhancements
 
 The codebase is structured to support:
 - Multi-user support (user_id foreign keys already in place)
 - Session/cookie-based authentication
-- PostgreSQL migration (SQLAlchemy ORM already used)
+- PostgreSQL + PostGIS for spatial indexing
+- Redis caching for production deployments
+- Pre-processed tile storage (like Rust reference implementation)
 - Advanced metrics using OSM data for road coverage
+- Multiple gradient options in UI

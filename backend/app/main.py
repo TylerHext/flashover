@@ -7,7 +7,7 @@ from pathlib import Path
 
 from app.config import settings
 from app.database import init_db
-from app.routers import auth, activities
+from app.routers import auth, activities, tiles
 
 # Create FastAPI application
 app = FastAPI(
@@ -19,6 +19,7 @@ app = FastAPI(
 # Register routers
 app.include_router(auth.router)
 app.include_router(activities.router)
+app.include_router(tiles.router)
 
 
 @app.on_event("startup")

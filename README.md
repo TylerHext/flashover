@@ -1,20 +1,26 @@
 # Flashover
 
-A web application that visualizes your Strava activities as a personalized, dynamic heatmap. Connect your Strava account, filter by date range or activity type, and see your athletic journey come to life on an interactive map.
+A web application that visualizes your Strava activities with **tile-based route rendering** and **overlap-based gradient coloring**. See your routes as distinct lines that get brighter where they overlap most, revealing your most-traveled paths.
 
-## Features (POC)
+## Features
 
-- **Strava OAuth Integration**: Secure authentication with your Strava account
-- **Activity Heatmap**: Visualize all your activities on an interactive map
-- **Filters**: Filter by date range and activity type (run, ride, walk, etc.)
-- **Dark Theme**: Tech-focused, minimalist UI with dark mode
-- **Single-User POC**: Local Docker deployment for personal use
+- **🎨 Overlap-Based Route Coloring**: Routes appear as distinct lines with gradient colors based on frequency
+  - Single pass: Dark color
+  - Multiple overlaps: Brighter colors
+  - Heavy traffic (10+ overlaps): Brightest colors
+- **🗺️ Tile-Based Rendering**: Efficient tile system with caching for instant panning/zooming
+- **🔐 Strava OAuth Integration**: Secure authentication with your Strava account
+- **🎯 Advanced Filters**: Filter by date range and activity type (run, ride, walk, etc.)
+- **⚡ Performance Optimized**: In-memory caching and spatial filtering for fast rendering
+- **🌙 Dark Theme**: Tech-focused, minimalist UI with dark mode
+- **📍 Single-User POC**: Local deployment for personal use
 
 ## Tech Stack
 
-- **Backend**: Python 3.11 + FastAPI
-- **Frontend**: TypeScript + Leaflet.js
+- **Backend**: Python 3.11 + FastAPI + NumPy + Pillow
+- **Frontend**: TypeScript + Vite + Leaflet.js
 - **Database**: SQLite (easily swappable to Postgres)
+- **Rendering**: Custom tile rasterizer with Bresenham line drawing + Cohen-Sutherland clipping
 - **Deployment**: Docker + Docker Compose
 
 ## Project Structure
@@ -23,25 +29,39 @@ A web application that visualizes your Strava activities as a personalized, dyna
 flashover/
 ├── backend/
 │   ├── app/
-│   │   ├── main.py           # FastAPI application entry
-│   │   ├── config.py         # Configuration & settings
-│   │   ├── database.py       # Database setup
-│   │   ├── models/           # Database models
-│   │   ├── routers/          # API endpoints
-│   │   └── services/         # Business logic
-│   ├── requirements.txt      # Python dependencies
-│   └── .env.example          # Environment variables template
+│   │   ├── main.py                 # FastAPI application entry
+│   │   ├── config.py               # Configuration & settings
+│   │   ├── database.py             # Database setup
+│   │   ├── models/                 # Database models (User, Activity, SyncLog)
+│   │   ├── routers/
+│   │   │   ├── auth.py             # Strava OAuth endpoints
+│   │   │   ├── activities.py      # Activity sync and retrieval
+│   │   │   └── tiles.py            # Tile rendering endpoints
+│   │   └── services/
+│   │       ├── strava_service.py   # Strava API client
+│   │       ├── activity_service.py # Activity sync logic
+│   │       ├── tile_renderer.py    # Core tile rasterization
+│   │       └── polyline.py         # Google Polyline decoder
+│   ├── requirements.txt            # Python dependencies
+│   └── .env.example                # Environment variables template
 ├── frontend/
 │   ├── src/
-│   │   ├── index.html        # Main HTML
-│   │   ├── main.ts           # TypeScript entry point
-│   │   ├── styles.css        # Application styles
-│   │   └── map/              # Map-related modules
-│   ├── package.json          # Node dependencies
-│   └── vite.config.ts        # Vite configuration
-├── db/                       # SQLite database (gitignored)
-├── Dockerfile                # Container definition
-└── docker-compose.yml        # Docker orchestration
+│   │   ├── index.html              # Main HTML
+│   │   ├── main.ts                 # TypeScript entry point
+│   │   ├── styles.css              # Application styles
+│   │   └── map/
+│   │       ├── RouteRenderer.ts    # Leaflet TileLayer wrapper
+│   │       └── polyline.ts         # Polyline utilities
+│   ├── package.json                # Node dependencies
+│   └── vite.config.ts              # Vite configuration with proxies
+├── docs/                           # 📚 Technical documentation
+│   ├── README.md                   # Documentation index
+│   ├── TILE_SEAM_BUG_FIX.md       # Critical bug retrospective
+│   ├── PERFORMANCE_OPTIMIZATIONS.md
+│   └── ROUTE_VISUALIZATION_UPGRADE.md
+├── db/                             # SQLite database (gitignored)
+├── Dockerfile                      # Container definition
+└── docker-compose.yml              # Docker orchestration
 ```
 
 ## Getting Started
@@ -104,36 +124,75 @@ npm run dev  # Runs on port 3000 with proxy to backend
 
 ## Usage
 
-1. Click "Connect to Strava" to authenticate
-2. Grant permissions to access your Strava data
-3. Your activities will be synced and displayed on the map
-4. Use the sidebar filters to customize your view:
+1. **Connect to Strava**: Click "Connect to Strava" and grant permissions
+2. **Sync Activities**: Click "Sync Activities" to fetch your route data from Strava
+3. **Explore Your Routes**:
+   - Pan and zoom the map to explore your activities
+   - Routes are rendered as tiles (cached for instant viewing)
+   - Bright colors show frequently-traveled routes
+4. **Apply Filters** (optional):
    - Select activity type (Run, Ride, Walk, etc.)
    - Choose date range
-   - Click "Apply Filters" to update the heatmap
+   - Routes update automatically
+
+## How It Works
+
+### Tile-Based Route Rendering
+
+Routes are rendered as **standard web map tiles** (z/x/y format), similar to how Google Maps works:
+
+1. **Rasterization**: Each GPS track is drawn onto a 512×512 pixel grid using Bresenham's line algorithm
+2. **Overlap Counting**: Each pixel tracks how many route segments pass through it (0-255)
+3. **Gradient Coloring**: Pixel counts map to colors via gradient palette:
+   - 1 pass → Dark orange (#fc4a1a)
+   - 5 passes → Medium orange
+   - 10+ passes → Bright yellow (#f7b733)
+4. **Cohen-Sutherland Clipping**: Lines are clipped at exact tile boundaries to prevent seams
+
+### Performance
+
+- **In-memory caching**: Tiles are cached for instant serving on repeat views
+- **Spatial filtering**: Only processes activities that intersect each tile
+- **Typical performance**: 1-3s first render, < 50ms cached
+
+See [`docs/PERFORMANCE_OPTIMIZATIONS.md`](docs/PERFORMANCE_OPTIMIZATIONS.md) for details.
 
 ## Roadmap
 
-### MVP
+### ✅ Completed (MVP)
 - [x] Project structure and scaffolding
 - [x] Database models (users, activities, sync_log)
 - [x] Strava OAuth flow implementation
 - [x] Activity data retrieval and sync
-- [ ] Heatmap rendering with Leaflet
-- [ ] Filter implementation (backend + frontend)
-- [ ] Docker production deployment
+- [x] Tile-based route rendering with overlap coloring
+- [x] Filter implementation (backend + frontend)
+- [x] Performance optimizations (caching, spatial filtering)
+- [x] Docker deployment
 
-### Future State
+### 🚀 Future Enhancements
+- [ ] Multiple color gradient options in UI
+- [ ] Redis caching for production deployments
+- [ ] PostgreSQL + PostGIS for spatial indexing
+- [ ] Pre-processed tile storage (like Rust reference)
 - [ ] Multi-user support
 - [ ] Advanced metrics (% roads covered using OSM data)
 - [ ] SaaS hosting option
 
+## Documentation
+
+Detailed technical documentation is available in the [`docs/`](docs/) directory:
+
+- **[Route Visualization System](docs/ROUTE_VISUALIZATION_UPGRADE.md)** - Complete system overview
+- **[Tile Seam Bug Fix](docs/TILE_SEAM_BUG_FIX.md)** - Critical bug retrospective with solutions
+- **[Performance Optimizations](docs/PERFORMANCE_OPTIMIZATIONS.md)** - Caching and optimization strategies
+
 ## Architecture Notes
 
-This POC is designed as a **single-user, local deployment**. The architecture supports future expansion to multi-user SaaS:
+This is designed as a **single-user, local deployment** with architecture that supports future SaaS expansion:
 
-- Database schema includes `user_id` foreign keys
+- Database schema includes `user_id` foreign keys (multi-user ready)
 - OAuth tokens are stored per user
+- Tile rendering is stateless and cacheable
 - API endpoints can be extended to support multi-tenancy
 
 ## Contributing
