@@ -29,6 +29,7 @@ sidebarHeader?.addEventListener('click', () => {
 
 // Auth functionality
 const loginBtn = document.getElementById('loginBtn');
+const logoutBtn = document.getElementById('logoutBtn');
 const authStatus = document.getElementById('authStatus');
 const syncBtn = document.getElementById('syncBtn');
 const loadMoreBtn = document.getElementById('loadMoreBtn');
@@ -39,12 +40,43 @@ const progressFill = document.getElementById('progressFill');
 const progressText = document.getElementById('progressText');
 const statsDiv = document.getElementById('stats');
 
-// Track sync state
-let hasMoreActivities = false;
-
 loginBtn?.addEventListener('click', async () => {
   // Redirect to backend auth endpoint
   window.location.href = '/auth/strava';
+});
+
+logoutBtn?.addEventListener('click', async () => {
+  try {
+    const response = await fetch('/auth/logout', { method: 'POST' });
+
+    if (response.ok) {
+      // Clear UI
+      if (authStatus) {
+        authStatus.innerHTML = '<button id="loginBtn" class="btn btn-primary">Connect to Strava</button>';
+        // Re-attach event listener to the new login button
+        const newLoginBtn = document.getElementById('loginBtn');
+        newLoginBtn?.addEventListener('click', async () => {
+          window.location.href = '/auth/strava';
+        });
+      }
+
+      // Hide all authenticated UI elements
+      if (logoutBtn) logoutBtn.style.display = 'none';
+      if (syncBtn) syncBtn.style.display = 'none';
+      if (loadMoreBtn) loadMoreBtn.style.display = 'none';
+      if (resetBtn) resetBtn.style.display = 'none';
+      if (syncStatus) syncStatus.innerHTML = '';
+      if (syncProgress) syncProgress.style.display = 'none';
+      if (statsDiv) statsDiv.innerHTML = '<p>Connect to Strava to see your stats</p>';
+
+      // Clear routes from map
+      routeRenderer.clearRoutes();
+
+      console.log('✓ Logged out successfully');
+    }
+  } catch (error) {
+    console.error('Logout failed:', error);
+  }
 });
 
 // Check authentication status
@@ -65,7 +97,10 @@ async function checkAuthStatus() {
         `;
       }
 
-      // Show sync and reset buttons
+      // Show logout, sync and reset buttons
+      if (logoutBtn) {
+        logoutBtn.style.display = 'block';
+      }
       if (syncBtn) {
         syncBtn.style.display = 'block';
       }
@@ -91,7 +126,7 @@ async function checkAuthStatus() {
 syncBtn?.addEventListener('click', async () => {
   if (!syncBtn || !syncStatus) return;
 
-  syncBtn.disabled = true;
+  (syncBtn as HTMLButtonElement).disabled = true;
   syncBtn.textContent = 'Syncing...';
   syncStatus.innerHTML = '<p class="sync-progress">Fetching recent activities from Strava...</p>';
 
@@ -123,9 +158,6 @@ syncBtn?.addEventListener('click', async () => {
 
     console.log('✓ Activities synced:', data);
 
-    // Track if there are more activities
-    hasMoreActivities = data.has_more;
-
     // Show "Load More" button if there are more activities
     if (loadMoreBtn) {
       loadMoreBtn.style.display = data.has_more ? 'block' : 'none';
@@ -143,7 +175,7 @@ syncBtn?.addEventListener('click', async () => {
     `;
     console.error('Sync error:', error);
   } finally {
-    syncBtn.disabled = false;
+    (syncBtn as HTMLButtonElement).disabled = false;
     syncBtn.textContent = 'Sync Activities';
   }
 });
@@ -152,7 +184,7 @@ syncBtn?.addEventListener('click', async () => {
 loadMoreBtn?.addEventListener('click', async () => {
   if (!loadMoreBtn || !syncStatus) return;
 
-  loadMoreBtn.disabled = true;
+  (loadMoreBtn as HTMLButtonElement).disabled = true;
   const originalText = loadMoreBtn.textContent;
   loadMoreBtn.textContent = 'Loading...';
   syncStatus.innerHTML = '<p class="sync-progress">Fetching more activities from Strava...</p>';
@@ -183,9 +215,6 @@ loadMoreBtn?.addEventListener('click', async () => {
 
     console.log('✓ More activities loaded:', data);
 
-    // Track if there are more activities
-    hasMoreActivities = data.has_more;
-
     // Hide button if no more activities
     if (!data.has_more) {
       loadMoreBtn.style.display = 'none';
@@ -204,7 +233,7 @@ loadMoreBtn?.addEventListener('click', async () => {
     `;
     console.error('Load more error:', error);
   } finally {
-    loadMoreBtn.disabled = false;
+    (loadMoreBtn as HTMLButtonElement).disabled = false;
     loadMoreBtn.textContent = originalText || 'Load More Activities';
   }
 });
@@ -216,7 +245,7 @@ resetBtn?.addEventListener('click', async () => {
   const confirmed = confirm('⚠️ This will delete ALL activities and reset sync state. Are you sure? This is for testing only.');
   if (!confirmed) return;
 
-  resetBtn.disabled = true;
+  (resetBtn as HTMLButtonElement).disabled = true;
   resetBtn.textContent = 'Resetting...';
 
   try {
@@ -266,7 +295,7 @@ resetBtn?.addEventListener('click', async () => {
     `;
     console.error('Reset error:', error);
   } finally {
-    resetBtn.disabled = false;
+    (resetBtn as HTMLButtonElement).disabled = false;
     resetBtn.textContent = 'Reset Sync (Dev)';
   }
 });

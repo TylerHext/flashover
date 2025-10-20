@@ -66,42 +66,93 @@ flashover/
 
 ## Getting Started
 
-### Prerequisites
+### Quick Start (Docker)
 
-- Docker and Docker Compose installed
-- Strava API credentials (Client ID and Client Secret)
+The fastest way to get flashover running is with Docker.
+
+#### Prerequisites
+
+- [Docker](https://docs.docker.com/get-docker/) and [Docker Compose](https://docs.docker.com/compose/install/) installed
+- Strava account with API credentials
   - Register your app at: https://www.strava.com/settings/api
+  - Set **Authorization Callback Domain** to: `localhost`
 
-### Setup
+#### Step 1: Clone and Configure
 
-1. **Clone the repository**
-   ```bash
-   git clone <your-repo-url>
-   cd flashover
-   ```
+```bash
+# Clone the repository
+git clone <your-repo-url>
+cd flashover
 
-2. **Configure environment variables**
-   ```bash
-   cp backend/.env.example backend/.env
-   ```
+# Copy the example environment file
+cp backend/.env.example backend/.env
+```
 
-   Edit `backend/.env` and add your Strava credentials:
-   ```
-   STRAVA_CLIENT_ID=your_client_id_here
-   STRAVA_CLIENT_SECRET=your_client_secret_here
-   STRAVA_REDIRECT_URI=http://localhost:8080/auth/strava/callback
-   ```
+Edit `backend/.env` and add your Strava API credentials:
 
-3. **Build and run with Docker**
-   ```bash
-   docker-compose up --build
-   ```
+```bash
+# Required: Your Strava app credentials
+STRAVA_CLIENT_ID=your_client_id_here
+STRAVA_CLIENT_SECRET=your_client_secret_here
 
-4. **Access the application**
+# These are pre-configured for Docker
+STRAVA_REDIRECT_URI=http://localhost:8080/auth/strava/callback
+FRONTEND_URL=http://localhost:8080
+```
 
-   Open your browser to: http://localhost:8080
+> **Where do I find these?** Go to https://www.strava.com/settings/api and look for:
+> - **Client ID**: Displayed on your app page
+> - **Client Secret**: Click "Show" to reveal it
 
-### Development Mode
+#### Step 2: Build and Run
+
+```bash
+# Build the Docker image and start the container
+docker-compose up --build
+```
+
+This will start the application on port 8080.
+
+#### Step 3: Use the Application
+
+1. **Open your browser** to: http://localhost:8080
+
+2. **Connect to Strava**
+   - Click "Connect to Strava"
+   - Authorize the application
+   - You'll be redirected back to Flashover
+
+3. **Sync your activities**
+   - Click "Sync Activities" to fetch your route data
+   - Initial sync takes ~10-30 seconds depending on activity count
+   - Routes will render automatically on the map
+
+4. **Explore your routes**
+   - Pan and zoom to see your most-traveled paths
+   - Brighter colors = more overlapping routes
+   - Use filters to view specific activity types or date ranges
+
+#### Managing the Docker Container
+
+```bash
+# Stop the application
+docker-compose down
+
+# Restart without rebuilding
+docker-compose up
+
+# Rebuild after code changes
+docker-compose up --build
+
+# View logs
+docker-compose logs -f flashover
+
+# Clean up everything (including database)
+docker-compose down -v
+rm -rf db/
+```
+
+### Development Tips
 
 For local development with hot-reload:
 
@@ -135,76 +186,5 @@ npm run dev  # Runs on port 3000 with proxy to backend
    - Choose date range
    - Routes update automatically
 
-## How It Works
-
-### Tile-Based Route Rendering
-
-Routes are rendered as **standard web map tiles** (z/x/y format), similar to how Google Maps works:
-
-1. **Rasterization**: Each GPS track is drawn onto a 512×512 pixel grid using Bresenham's line algorithm
-2. **Overlap Counting**: Each pixel tracks how many route segments pass through it (0-255)
-3. **Gradient Coloring**: Pixel counts map to colors via gradient palette:
-   - 1 pass → Dark orange (#fc4a1a)
-   - 5 passes → Medium orange
-   - 10+ passes → Bright yellow (#f7b733)
-4. **Cohen-Sutherland Clipping**: Lines are clipped at exact tile boundaries to prevent seams
-
-### Performance
-
-- **In-memory caching**: Tiles are cached for instant serving on repeat views
-- **Spatial filtering**: Only processes activities that intersect each tile
-- **Typical performance**: 1-3s first render, < 50ms cached
-
-See [`docs/PERFORMANCE_OPTIMIZATIONS.md`](docs/PERFORMANCE_OPTIMIZATIONS.md) for details.
-
-## Roadmap
-
-### ✅ Completed (MVP)
-- [x] Project structure and scaffolding
-- [x] Database models (users, activities, sync_log)
-- [x] Strava OAuth flow implementation
-- [x] Activity data retrieval and sync
-- [x] Tile-based route rendering with overlap coloring
-- [x] Filter implementation (backend + frontend)
-- [x] Performance optimizations (caching, spatial filtering)
-- [x] Docker deployment
-
-### 🚀 Future Enhancements
-- [ ] Multiple color gradient options in UI
-- [ ] Redis caching for production deployments
-- [ ] PostgreSQL + PostGIS for spatial indexing
-- [ ] Pre-processed tile storage (like Rust reference)
-- [ ] Multi-user support
-- [ ] Advanced metrics (% roads covered using OSM data)
-- [ ] SaaS hosting option
-
-## Documentation
-
-Detailed technical documentation is available in the [`docs/`](docs/) directory:
-
-- **[Route Visualization System](docs/ROUTE_VISUALIZATION_UPGRADE.md)** - Complete system overview
-- **[Tile Seam Bug Fix](docs/TILE_SEAM_BUG_FIX.md)** - Critical bug retrospective with solutions
-- **[Performance Optimizations](docs/PERFORMANCE_OPTIMIZATIONS.md)** - Caching and optimization strategies
-
-## Architecture Notes
-
-This is designed as a **single-user, local deployment** with architecture that supports future SaaS expansion:
-
-- Database schema includes `user_id` foreign keys (multi-user ready)
-- OAuth tokens are stored per user
-- Tile rendering is stateless and cacheable
-- API endpoints can be extended to support multi-tenancy
-
-## Contributing
-
-This is a personal POC project. Feel free to fork and adapt for your own use!
-
-## License
-
-MIT License - See LICENSE file for details
-
-## Acknowledgments
-
-- Powered by [Strava API](https://developers.strava.com/)
-- Map tiles by [CARTO](https://carto.com/)
-- Built with [FastAPI](https://fastapi.tiangolo.com/) and [Leaflet](https://leafletjs.com/)
+## Acknowledgements
+ - (hotpot)[github.com/erik/hotpot]

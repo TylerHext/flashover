@@ -118,9 +118,9 @@ export class HeatmapRenderer {
   /**
    * Update heatmap with new options without re-decoding
    *
-   * @param options - New heatmap options
+   * @param _options - New heatmap options (unused - method is informational only)
    */
-  updateOptions(options: {
+  updateOptions(_options: {
     radius?: number;
     blur?: number;
     maxIntensity?: number;

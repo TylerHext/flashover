@@ -1,10 +1,11 @@
 """Authentication router for Strava OAuth flow."""
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db
+from app.dependencies import get_current_user_optional
 from app.models import User
 from app.services.strava import StravaService
 
@@ -24,6 +25,7 @@ async def strava_login():
 
 @router.get("/strava/callback")
 async def strava_callback(
+    request: Request,
     code: str = Query(..., description="Authorization code from Strava"),
     scope: str = Query(None, description="Granted scopes"),
     error: str = Query(None, description="Error from Strava"),
@@ -32,7 +34,7 @@ async def strava_callback(
     """
     Handle Strava OAuth callback.
 
-    Exchanges authorization code for tokens and stores them in database.
+    Exchanges authorization code for tokens, stores them in database, and creates session.
     """
     # Check for authorization errors
     if error:
@@ -74,10 +76,12 @@ async def strava_callback(
         db.commit()
         db.refresh(user)
 
-        print(f"✓ User authenticated: Strava ID {user.strava_id}")
+        # Set session to track logged-in user
+        request.session["user_id"] = user.id
+
+        print(f"✓ User authenticated: Strava ID {user.strava_id}, session created")
 
         # Redirect back to frontend with success
-        # For POC, we'll just redirect to root - in production you'd set a session/cookie
         redirect_url = f"{settings.FRONTEND_URL}/?auth=success"
         return RedirectResponse(url=redirect_url)
 
@@ -91,15 +95,12 @@ async def strava_callback(
 
 
 @router.get("/status")
-async def auth_status(db: Session = Depends(get_db)):
+async def auth_status(user: User | None = Depends(get_current_user_optional)):
     """
-    Check authentication status.
+    Check authentication status for the currently logged-in user.
 
-    For POC: Returns the first (and only) user if authenticated.
-    In production, this would check session/cookie for specific user.
+    Returns user info if authenticated, or authentication: false if not.
     """
-    user = db.query(User).first()
-
     if not user:
         return {
             "authenticated": False,
@@ -110,4 +111,23 @@ async def auth_status(db: Session = Depends(get_db)):
         "authenticated": True,
         "strava_id": user.strava_id,
         "token_expired": user.is_token_expired,
+    }
+
+
+@router.post("/logout")
+async def logout(request: Request):
+    """
+    Log out the current user.
+
+    Clears the session but preserves user data and activities in the database.
+    The user can log back in later without needing to re-sync activities.
+    """
+    user_id = request.session.get("user_id")
+    request.session.clear()
+
+    print(f"✓ User logged out: user_id={user_id}")
+
+    return {
+        "success": True,
+        "message": "Logged out successfully"
     }

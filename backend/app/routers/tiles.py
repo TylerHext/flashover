@@ -7,7 +7,8 @@ from sqlalchemy.orm import Session
 from typing import Optional
 
 from ..database import get_db
-from ..models import Activity
+from ..dependencies import get_current_user_optional
+from ..models import Activity, User
 from ..services.tile_renderer import (
     TileCoordinate,
     TileRasterizer,
@@ -46,7 +47,7 @@ async def clear_cache():
     return {"status": "ok", "message": "Cache cleared"}
 
 
-def _get_cache_key(z: int, x: int, y: int, gradient: str,
+def _get_cache_key(z: int, x: int, y: int, user_id: int, gradient: str,
                    activity_type: Optional[str], start_date: Optional[str],
                    end_date: Optional[str],
                    min_color: Optional[str], mid_color: Optional[str],
@@ -54,7 +55,7 @@ def _get_cache_key(z: int, x: int, y: int, gradient: str,
     """Generate cache key for tile."""
     filters = f"{activity_type or ''},{start_date or ''},{end_date or ''}"
     custom_gradient = f"{min_color or ''},{mid_color or ''},{max_color or ''},{midpoint or ''}"
-    return f"{z},{x},{y},{gradient},{filters},{custom_gradient}"
+    return f"{z},{x},{y},{user_id},{gradient},{filters},{custom_gradient}"
 
 
 @router.get("/tiles/{z}/{x}/{y}.png")
@@ -63,6 +64,7 @@ async def render_tile(
     x: int,
     y: int,
     db: Session = Depends(get_db),
+    user: User | None = Depends(get_current_user_optional),
     gradient: str = Query("orange", description="Color gradient to use"),
     activity_type: Optional[str] = Query(None, description="Filter by activity type"),
     start_date: Optional[str] = Query(None, description="Filter by start date (YYYY-MM-DD)"),
@@ -74,6 +76,8 @@ async def render_tile(
 ):
     """
     Render a map tile with routes colored by overlap intensity.
+
+    Only renders activities for the currently logged-in user.
 
     Args:
         z: Zoom level
@@ -87,6 +91,13 @@ async def render_tile(
     Returns:
         PNG image tile
     """
+    # Return empty tile if no user is logged in
+    if not user:
+        return Response(
+            content=_empty_tile_png(),
+            media_type="image/png",
+            headers={"Cache-Control": "public, max-age=3600"}
+        )
     # Validate zoom level
     if z < 0 or z > 18:
         return Response(status_code=400, content="Invalid zoom level")
@@ -97,7 +108,7 @@ async def render_tile(
         return Response(status_code=400, content="Invalid tile coordinates")
 
     # Check cache first
-    cache_key = _get_cache_key(z, x, y, gradient, activity_type, start_date, end_date,
+    cache_key = _get_cache_key(z, x, y, user.id, gradient, activity_type, start_date, end_date,
                                 min_color, mid_color, max_color, midpoint)
     cached = _tile_cache.get(cache_key)
     if cached:
@@ -127,10 +138,11 @@ async def render_tile(
     # Get tile bounds for querying activities
     min_x, min_y, max_x, max_y = tile.bounds()
 
-    # Query activities that might intersect with this tile
-    # For POC, we'll query all activities and filter client-side
-    # In production, you'd want to add spatial indexing
-    query = db.query(Activity).filter(Activity.polyline.isnot(None))
+    # Query activities for the current user that might intersect with this tile
+    query = db.query(Activity).filter(
+        Activity.user_id == user.id,
+        Activity.polyline.isnot(None)
+    )
 
     # Apply filters
     if activity_type:
