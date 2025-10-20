@@ -1,70 +1,6 @@
-# Flashover
+# flashover
 
-A web application that visualizes your Strava activities with **tile-based route rendering** and **overlap-based gradient coloring**. See your routes as distinct lines that get brighter where they overlap most, revealing your most-traveled paths.
-
-## Features
-
-- **🎨 Overlap-Based Route Coloring**: Routes appear as distinct lines with gradient colors based on frequency
-  - Single pass: Dark color
-  - Multiple overlaps: Brighter colors
-  - Heavy traffic (10+ overlaps): Brightest colors
-- **🗺️ Tile-Based Rendering**: Efficient tile system with caching for instant panning/zooming
-- **🔐 Strava OAuth Integration**: Secure authentication with your Strava account
-- **🎯 Advanced Filters**: Filter by date range and activity type (run, ride, walk, etc.)
-- **⚡ Performance Optimized**: In-memory caching and spatial filtering for fast rendering
-- **🌙 Dark Theme**: Tech-focused, minimalist UI with dark mode
-- **📍 Single-User POC**: Local deployment for personal use
-
-## Tech Stack
-
-- **Backend**: Python 3.11 + FastAPI + NumPy + Pillow
-- **Frontend**: TypeScript + Vite + Leaflet.js
-- **Database**: SQLite (easily swappable to Postgres)
-- **Rendering**: Custom tile rasterizer with Bresenham line drawing + Cohen-Sutherland clipping
-- **Deployment**: Docker + Docker Compose
-
-## Project Structure
-
-```
-flashover/
-├── backend/
-│   ├── app/
-│   │   ├── main.py                 # FastAPI application entry
-│   │   ├── config.py               # Configuration & settings
-│   │   ├── database.py             # Database setup
-│   │   ├── models/                 # Database models (User, Activity, SyncLog)
-│   │   ├── routers/
-│   │   │   ├── auth.py             # Strava OAuth endpoints
-│   │   │   ├── activities.py      # Activity sync and retrieval
-│   │   │   └── tiles.py            # Tile rendering endpoints
-│   │   └── services/
-│   │       ├── strava_service.py   # Strava API client
-│   │       ├── activity_service.py # Activity sync logic
-│   │       ├── tile_renderer.py    # Core tile rasterization
-│   │       └── polyline.py         # Google Polyline decoder
-│   ├── requirements.txt            # Python dependencies
-│   └── .env.example                # Environment variables template
-├── frontend/
-│   ├── src/
-│   │   ├── index.html              # Main HTML
-│   │   ├── main.ts                 # TypeScript entry point
-│   │   ├── styles.css              # Application styles
-│   │   └── map/
-│   │       ├── RouteRenderer.ts    # Leaflet TileLayer wrapper
-│   │       └── polyline.ts         # Polyline utilities
-│   ├── package.json                # Node dependencies
-│   └── vite.config.ts              # Vite configuration with proxies
-├── docs/                           # 📚 Technical documentation
-│   ├── README.md                   # Documentation index
-│   ├── TILE_SEAM_BUG_FIX.md       # Critical bug retrospective
-│   ├── PERFORMANCE_OPTIMIZATIONS.md
-│   └── ROUTE_VISUALIZATION_UPGRADE.md
-├── db/                             # SQLite database (gitignored)
-├── Dockerfile                      # Container definition
-└── docker-compose.yml              # Docker orchestration
-```
-
-## Getting Started
+A web application for visualizing your Strava activity routes.
 
 ### Quick Start (Docker)
 
@@ -91,7 +27,7 @@ cp backend/.env.example backend/.env
 Edit `backend/.env` and add your Strava API credentials:
 
 ```bash
-# Required: Your Strava app credentials
+# Required: Strava app credentials https://www.strava.com/settings/api 
 STRAVA_CLIENT_ID=your_client_id_here
 STRAVA_CLIENT_SECRET=your_client_secret_here
 
@@ -99,10 +35,6 @@ STRAVA_CLIENT_SECRET=your_client_secret_here
 STRAVA_REDIRECT_URI=http://localhost:8080/auth/strava/callback
 FRONTEND_URL=http://localhost:8080
 ```
-
-> **Where do I find these?** Go to https://www.strava.com/settings/api and look for:
-> - **Client ID**: Displayed on your app page
-> - **Client Secret**: Click "Show" to reveal it
 
 #### Step 2: Build and Run
 
