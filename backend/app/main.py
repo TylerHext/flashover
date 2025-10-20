@@ -2,6 +2,7 @@
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+from starlette.middleware.sessions import SessionMiddleware
 import os
 from pathlib import Path
 
@@ -15,6 +16,9 @@ app = FastAPI(
     description="Strava Activity Heatmap Visualization",
     version="0.1.0"
 )
+
+# Add session middleware for user authentication
+app.add_middleware(SessionMiddleware, secret_key=settings.SECRET_KEY)
 
 # Register routers
 app.include_router(auth.router)
@@ -42,14 +46,21 @@ async def health_check():
 
 
 # Mount static files (frontend) - will be available after frontend is built
-static_dir = os.path.join(os.path.dirname(__file__), "../../frontend/dist")
-if os.path.exists(static_dir):
-    app.mount("/static", StaticFiles(directory=static_dir), name="static")
+# In Docker: /app/frontend/dist (because WORKDIR is /app and we COPY backend/ to ./)
+# In local dev: /path/to/repo/frontend/dist (backend is in backend/ subdirectory)
+if os.environ.get("RUNNING_IN_DOCKER"):
+    static_dir = Path("/app/frontend/dist")
+else:
+    static_dir = Path(__file__).parent.parent.parent / "frontend" / "dist"
+
+if static_dir.exists():
+    # Mount the assets directory for CSS/JS files
+    app.mount("/assets", StaticFiles(directory=str(static_dir / "assets")), name="assets")
 
     @app.get("/")
     async def serve_frontend():
         """Serve the frontend application."""
-        return FileResponse(os.path.join(static_dir, "index.html"))
+        return FileResponse(str(static_dir / "index.html"))
 
 
 if __name__ == "__main__":

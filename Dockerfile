@@ -42,6 +42,11 @@ COPY --from=frontend-builder /frontend/dist ./frontend/dist
 # Create directory for SQLite database
 RUN mkdir -p /app/db
 
+# Set environment variables for Docker production mode
+ENV RUNNING_IN_DOCKER=1
+ENV FRONTEND_URL=http://localhost:8080
+ENV ENVIRONMENT=production
+
 # Expose port
 EXPOSE 8080
 

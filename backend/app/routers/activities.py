@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.dependencies import get_current_user
 from app.models import User, Activity, SyncLog
 from app.services.activity import ActivityService
 
@@ -15,6 +16,7 @@ router = APIRouter(prefix="/api/activities", tags=["activities"])
 async def sync_activities(
     pages: int = Query(1, ge=1, le=50, description="Number of pages to fetch (1-50)"),
     backfill: bool = Query(False, description="Backfill mode: fetch historical activities (ignore sync timestamp)"),
+    user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
@@ -23,18 +25,7 @@ async def sync_activities(
     Default: Fetches 1 page (200 activities) for quick sync.
     Use pages parameter to fetch more: pages=5 fetches 1000 activities.
     Use backfill=true to fetch historical activities (ignores last sync timestamp).
-
-    For POC: Uses the first (and only) user in the database.
-    In production, this would use session/cookie to identify the user.
     """
-    # Get authenticated user (POC: first user)
-    user = db.query(User).first()
-
-    if not user:
-        raise HTTPException(
-            status_code=401,
-            detail="No authenticated user found. Please login first."
-        )
 
     try:
         result = await ActivityService.sync_user_activities(
@@ -63,22 +54,12 @@ async def get_activities(
     activity_type: Optional[str] = Query(None, description="Filter by activity type"),
     start_date: Optional[str] = Query(None, description="Filter activities after this date (ISO format)"),
     end_date: Optional[str] = Query(None, description="Filter activities before this date (ISO format)"),
+    user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
     Get activities for the authenticated user with optional filters.
-
-    For POC: Uses the first (and only) user in the database.
-    In production, this would use session/cookie to identify the user.
     """
-    # Get authenticated user (POC: first user)
-    user = db.query(User).first()
-
-    if not user:
-        raise HTTPException(
-            status_code=401,
-            detail="No authenticated user found. Please login first."
-        )
 
     # Parse date filters
     start_datetime = None
@@ -126,21 +107,16 @@ async def get_activities(
 
 
 @router.post("/sync/reset")
-async def reset_sync(db: Session = Depends(get_db)):
+async def reset_sync(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     """
     Reset sync state and clear all activities (DEVELOPMENT ONLY).
 
     This allows testing the full backfill flow by clearing the sync log
     and all activities, forcing a fresh sync from Strava.
     """
-    # Get authenticated user (POC: first user)
-    user = db.query(User).first()
-
-    if not user:
-        raise HTTPException(
-            status_code=401,
-            detail="No authenticated user found. Please login first."
-        )
 
     # Delete all activities for this user
     activities_deleted = db.query(Activity).filter(Activity.user_id == user.id).delete()
@@ -162,20 +138,15 @@ async def reset_sync(db: Session = Depends(get_db)):
 
 
 @router.get("/sync/status")
-async def get_sync_status(db: Session = Depends(get_db)):
+async def get_sync_status(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     """
     Get sync status for the authenticated user.
 
     Returns information about last sync time and activity counts.
     """
-    # Get authenticated user (POC: first user)
-    user = db.query(User).first()
-
-    if not user:
-        raise HTTPException(
-            status_code=401,
-            detail="No authenticated user found. Please login first."
-        )
 
     # Get sync log
     sync_log = db.query(SyncLog).filter(SyncLog.user_id == user.id).first()
@@ -191,20 +162,15 @@ async def get_sync_status(db: Session = Depends(get_db)):
 
 
 @router.get("/stats")
-async def get_activity_stats(db: Session = Depends(get_db)):
+async def get_activity_stats(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     """
     Get activity statistics for the authenticated user.
 
     Returns counts by activity type and date range info.
     """
-    # Get authenticated user (POC: first user)
-    user = db.query(User).first()
-
-    if not user:
-        raise HTTPException(
-            status_code=401,
-            detail="No authenticated user found. Please login first."
-        )
 
     # Get all activities for user
     activities = db.query(Activity).filter(Activity.user_id == user.id).all()
