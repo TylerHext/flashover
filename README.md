@@ -121,4 +121,4 @@ npm run dev  # Runs on port 3000 with proxy to backend
    - Routes update automatically
 
 ## Acknowledgements
- - (hotpot)[github.com/erik/hotpot]
+ - [hotpot](github.com/erik/hotpot)
