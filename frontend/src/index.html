@@ -144,6 +144,31 @@
     <!-- Map Container -->
     <main class="map-container">
       <div id="map"></div>
+
+      <!-- Export Button -->
+      <button id="exportBtn" class="export-btn" title="Export Map as Image">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+          <polyline points="7 10 12 15 17 10"></polyline>
+          <line x1="12" y1="15" x2="12" y2="3"></line>
+        </svg>
+      </button>
+
+      <!-- Capture Overlay (hidden by default) -->
+      <div id="captureOverlay" class="capture-overlay" style="display: none;">
+        <div class="capture-instructions">
+          <p>Click and drag to select the area to export</p>
+          <button id="cancelCapture" class="capture-cancel-btn">Cancel (Esc)</button>
+        </div>
+        <div id="captureSelection" class="capture-selection">
+          <div class="capture-handle capture-handle-nw"></div>
+          <div class="capture-handle capture-handle-ne"></div>
+          <div class="capture-handle capture-handle-sw"></div>
+          <div class="capture-handle capture-handle-se"></div>
+          <div class="capture-dimensions"></div>
+          <button id="confirmCapture" class="capture-confirm-btn">Export</button>
+        </div>
+      </div>
     </main>
   </div>
 
