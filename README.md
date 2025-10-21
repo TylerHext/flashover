@@ -1,6 +1,8 @@
 # flashover
 
-A web application for visualizing your Strava activity routes.
+![Flashover Heatmap Example](heatmap.png)
+
+A web application for visualizing your Strava activity routes with tile-based rendering and overlap-based gradient coloring.
 
 ### Quick Start (Docker)
 
@@ -119,4 +121,4 @@ npm run dev  # Runs on port 3000 with proxy to backend
    - Routes update automatically
 
 ## Acknowledgements
- - (hotpot)[github.com/erik/hotpot]
+ - [hotpot](github.com/erik/hotpot)
