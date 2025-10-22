@@ -25,6 +25,12 @@ class Activity(Base):
     distance = Column(Float, nullable=False)  # Distance in meters
     polyline = Column(Text, nullable=True)  # Encoded polyline from Strava
 
+    # Spatial bounding box in Web Mercator coordinates (for efficient tile queries)
+    bbox_min_x = Column(Float, nullable=True, index=True)
+    bbox_min_y = Column(Float, nullable=True, index=True)
+    bbox_max_x = Column(Float, nullable=True, index=True)
+    bbox_max_y = Column(Float, nullable=True, index=True)
+
     # Additional data (stored as JSON) - for elevation, moving_time, etc.
     extra_data = Column(JSON, nullable=True)
 

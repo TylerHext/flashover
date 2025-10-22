@@ -1,10 +1,12 @@
 """Activity service for fetching and syncing Strava activities."""
 from datetime import datetime
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Tuple
 from sqlalchemy.orm import Session
 
 from app.models import User, Activity, SyncLog
 from app.services.strava import StravaService
+from app.services.polyline import decode_polyline
+from app.services.tile_renderer import TileCoordinate
 
 
 class ActivityService:
@@ -125,6 +127,45 @@ class ActivityService:
         }
 
     @staticmethod
+    def _calculate_bbox(polyline: str) -> Optional[Tuple[float, float, float, float]]:
+        """
+        Calculate Web Mercator bounding box for a polyline.
+
+        Args:
+            polyline: Encoded polyline string
+
+        Returns:
+            Tuple of (min_x, min_y, max_x, max_y) in Web Mercator meters, or None
+        """
+        if not polyline:
+            return None
+
+        try:
+            lnglats = decode_polyline(polyline)
+            if not lnglats:
+                return None
+
+            # Convert all coordinates to Web Mercator
+            mercator_coords = []
+            for lng, lat in lnglats:
+                merc = TileCoordinate.lnglat_to_mercator(lng, lat)
+                if merc:
+                    mercator_coords.append(merc)
+
+            if not mercator_coords:
+                return None
+
+            # Calculate bounding box
+            xs = [x for x, y in mercator_coords]
+            ys = [y for x, y in mercator_coords]
+
+            return (min(xs), min(ys), max(xs), max(ys))
+
+        except Exception as e:
+            print(f"Warning: Error calculating bbox: {e}")
+            return None
+
+    @staticmethod
     def _parse_activity_data(activity_data: Dict, user_id: int) -> Dict:
         """
         Parse Strava activity data into our Activity model format.
@@ -145,6 +186,17 @@ class ActivityService:
         polyline = None
         if activity_data.get("map") and activity_data["map"].get("summary_polyline"):
             polyline = activity_data["map"]["summary_polyline"]
+
+        # Calculate bounding box for spatial queries
+        bbox = None
+        bbox_min_x = None
+        bbox_min_y = None
+        bbox_max_x = None
+        bbox_max_y = None
+        if polyline:
+            bbox = ActivityService._calculate_bbox(polyline)
+            if bbox:
+                bbox_min_x, bbox_min_y, bbox_max_x, bbox_max_y = bbox
 
         # Store additional data in extra_data JSON field
         extra_data = {
@@ -167,6 +219,10 @@ class ActivityService:
             "start_date": start_date,
             "distance": activity_data["distance"],
             "polyline": polyline,
+            "bbox_min_x": bbox_min_x,
+            "bbox_min_y": bbox_min_y,
+            "bbox_max_x": bbox_max_x,
+            "bbox_max_y": bbox_max_y,
             "extra_data": extra_data,
         }
 

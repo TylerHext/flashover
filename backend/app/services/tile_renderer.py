@@ -483,14 +483,10 @@ class TileRasterizer:
         Returns:
             PIL Image with gradient applied
         """
-        # Create RGBA image
-        img_array = np.zeros((self.size, self.size, 4), dtype=np.uint8)
-
-        # Apply gradient to each pixel
-        for y in range(self.size):
-            for x in range(self.size):
-                count = self.pixels[y, x]
-                img_array[y, x] = gradient.sample(count)
+        # Vectorized gradient application using NumPy indexing
+        # This is 10-100x faster than the pixel-by-pixel loop
+        # Use the palette array as a lookup table for all pixels at once
+        img_array = gradient.palette[self.pixels]
 
         return Image.fromarray(img_array, mode='RGBA')
 

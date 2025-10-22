@@ -138,10 +138,24 @@ async def render_tile(
     # Get tile bounds for querying activities
     min_x, min_y, max_x, max_y = tile.bounds()
 
-    # Query activities for the current user that might intersect with this tile
+    # Expand tile bounds slightly to catch activities that might cross into tile
+    # Use same expansion factor as later in the code for consistency
+    tile_expansion = 0.1
+    expanded_min_x = min_x - (max_x - min_x) * tile_expansion
+    expanded_min_y = min_y - (max_y - min_y) * tile_expansion
+    expanded_max_x = max_x + (max_x - min_x) * tile_expansion
+    expanded_max_y = max_y + (max_y - min_y) * tile_expansion
+
+    # Query activities with spatial filtering at database level
+    # Only fetch activities whose bounding boxes intersect with the tile bounds
     query = db.query(Activity).filter(
         Activity.user_id == user.id,
-        Activity.polyline.isnot(None)
+        Activity.polyline.isnot(None),
+        # Bounding box intersection check (AABB collision detection)
+        Activity.bbox_min_x <= expanded_max_x,
+        Activity.bbox_max_x >= expanded_min_x,
+        Activity.bbox_min_y <= expanded_max_y,
+        Activity.bbox_max_y >= expanded_min_y,
     )
 
     # Apply filters
@@ -165,43 +179,16 @@ async def render_tile(
     # Create rasterizer
     rasterizer = TileRasterizer(tile, size=512)
 
-    # Spatial filtering: only process activities that intersect tile bounds
-    # Expand tile bounds slightly to catch activities that might cross into tile
-    tile_bounds_expanded = (
-        min_x - (max_x - min_x) * 0.1,
-        min_y - (max_y - min_y) * 0.1,
-        max_x + (max_x - min_x) * 0.1,
-        max_y + (max_y - min_y) * 0.1,
-    )
-
     activities_processed = 0
-    activities_skipped = 0
 
-    # Rasterize activities that intersect with tile
+    # Rasterize activities (already spatially filtered at DB level)
     for activity in activities:
         if activity.polyline:
             try:
-                # Decode polyline
+                # Decode polyline and add to rasterizer
                 lnglats = decode_polyline(activity.polyline)
-
-                # Quick spatial filter: check if any point is near this tile
-                # Convert to mercator and check bounds
-                intersects = False
-                for lng, lat in lnglats:
-                    merc = TileCoordinate.lnglat_to_mercator(lng, lat)
-                    if merc:
-                        mx, my = merc
-                        if (tile_bounds_expanded[0] <= mx <= tile_bounds_expanded[2] and
-                            tile_bounds_expanded[1] <= my <= tile_bounds_expanded[3]):
-                            intersects = True
-                            break
-
-                if intersects:
-                    # Add to rasterizer
-                    rasterizer.add_polyline(lnglats)
-                    activities_processed += 1
-                else:
-                    activities_skipped += 1
+                rasterizer.add_polyline(lnglats)
+                activities_processed += 1
 
             except Exception as e:
                 # Skip activities with invalid polylines
@@ -237,7 +224,6 @@ async def render_tile(
             "Cache-Control": "public, max-age=3600",
             "X-Activity-Total": str(len(activities)),
             "X-Activity-Rendered": str(activities_processed),
-            "X-Activity-Skipped": str(activities_skipped),
             "X-Cache": "MISS"
         }
     )
