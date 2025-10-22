@@ -19,7 +19,7 @@ The fastest way to get flashover running is with Docker.
 
 ```bash
 # Clone the repository
-git clone <your-repo-url>
+git clone https://github.com/TylerHext/flashover.git
 cd flashover
 
 # Copy the example environment file
